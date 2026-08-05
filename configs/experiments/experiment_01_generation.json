@@ -1,0 +1,60 @@
+﻿{
+  "experiment": {
+    "id": "experiment_01_generation",
+    "title": "Contrastive sycophancy response generation",
+    "description": "Generate positive-condition and negative-condition responses for persona-vector extraction.",
+    "status": "completed",
+    "source_notebook": "notebooks/archive/persona_implementation_v0_exploration.ipynb",
+    "official_repository_baseline_commit": "b8e0f04"
+  },
+  "target_model": {
+    "model_id": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_card_url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct",
+    "dtype": "float16",
+    "device_placement": {
+      "strategy": "single_gpu",
+      "device_index": 0
+    },
+    "trust_remote_code": false,
+    "low_cpu_mem_usage": true
+  },
+  "trait": {
+    "name": "sycophancy",
+    "artifact_name": "sycophantic"
+  },
+  "artifacts": {
+    "source": "official_persona_vectors_repository",
+    "extraction_artifact": "data_generation/trait_data_extract/sycophantic.json",
+    "evaluation_artifact": "data_generation/trait_data_eval/sycophantic.json",
+    "question_limit": 20,
+    "instruction_pair_limit": 5
+  },
+  "generation": {
+    "split": "extraction",
+    "rollouts_per_condition": 10,
+    "base_seed": 100000,
+    "max_new_tokens": 256,
+    "do_sample": true,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "use_cache": true
+  },
+  "sharding": {
+    "enabled": true,
+    "shard_size": 200,
+    "expected_shard_count": 10,
+    "resume_by_sample_id": true
+  },
+  "expected_counts": {
+    "total_records": 2000,
+    "positive_condition_records": 1000,
+    "negative_condition_records": 1000,
+    "unique_sample_ids": 2000
+  },
+  "historical_output": {
+    "runtime": "Kaggle",
+    "runtime_root": "/kaggle/working/persona_pipeline",
+    "generation_directory": "generations/paper_faithful_shards",
+    "merged_filename": "sycophantic_paper_all_rollouts.jsonl"
+  }
+}
