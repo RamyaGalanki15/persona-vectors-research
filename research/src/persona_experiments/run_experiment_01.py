@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from persona_experiments.experiment_config import load_experiment_bundle
@@ -45,8 +46,41 @@ def ensure_directory(path_value: str) -> Path:
 
     return path
 
+def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments for Experiment 01.
+    """
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Validate or execute Experiment 01 hidden-state extraction."
+        )
+    )
+
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Load the model and execute real samples.",
+    )
+
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=1,
+        help="Maximum number of samples to execute.",
+    )
+
+    parser.add_argument(
+        "--condition",
+        choices=["positive", "negative", "both"],
+        default="positive",
+        help="Contrastive condition to execute.",
+    )
+
+    return parser.parse_args()
 
 def main() -> None:
+    args=parse_args()
     """
     Load and validate Experiment 01 configuration.
 
@@ -161,6 +195,19 @@ def main() -> None:
     print(
         f"Selected negative instructions: "
         f"{negative_instruction_count}"
+    )
+    if not args.execute:
+        print()
+        print("Dry run complete. No model was loaded.")
+        return
+
+    print()
+    print("Execution requested.")
+    print(f"Condition: {args.condition}")
+    print(f"Maximum samples: {args.max_samples}")
+
+    raise NotImplementedError(
+        "Real model execution will be connected in the next step."
     )
 
 
