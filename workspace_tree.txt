@@ -1,0 +1,78 @@
+﻿Folder PATH listing for volume Windows
+Volume serial number is FE39-FC48
+C:.
+|   .env.example
+|   .gitignore
+|   activation_steer.py
+|   config.py
+|   dataset.zip
+|   generate_vec.py
+|   judge.py
+|   LICENSE
+|   README.md
+|   requirements.txt
+|   sft.py
+|   training.py
+|   utils.py
+|   validate.py
+|   workspace_tree.txt
+|   
++---configs
+|   |   train_instruct_7b.json
+|   |   train_instruct_7b_steer.json
+|   |   
+|   \---experiments
+|           experiment_01_generation.json
+|           
++---data_generation
+|   |   prompts.py
+|   |   
+|   +---trait_data_eval
+|   |       apathetic.json
+|   |       evil.json
+|   |       hallucinating.json
+|   |       humorous.json
+|   |       impolite.json
+|   |       optimistic.json
+|   |       sycophantic.json
+|   |       
+|   \---trait_data_extract
+|           apathetic.json
+|           evil.json
+|           hallucinating.json
+|           humorous.json
+|           impolite.json
+|           optimistic.json
+|           sycophantic.json
+|           
++---docs
+|   \---decisions
+|           001-reject-qwen15b-as-judge.md
+|           
++---eval
+|       cal_projection.py
+|       eval_persona.py
+|       model_utils.py
+|       prompts.py
+|       __init__.py
+|       
++---experiments
+|   +---experiment_01_generation
+|   |       README.md
+|   |       
+|   \---experiment_02_judge_calibration
++---notebooks
+|   +---archive
+|   |       persona_implementation_v0_exploration.ipynb
+|   |       README.md
+|   |       
+|   \---experiments
++---output
+|       qwen2.5-7b-instruct_baseline.csv
+|       
+\---scripts
+        cal_projection.sh
+        eval_persona.sh
+        eval_steering.sh
+        generate_vec.sh
+        
