@@ -12,7 +12,10 @@ DEFAULT_CONFIG_PATH = Path(
 
 def validate_path(path_value: str, label: str) -> Path:
     """
-    Validate that a configured path exists.
+    Validate that a required input path exists.
+
+    This should be used for files or directories that must already exist,
+    such as the trait extraction artifact.
     """
 
     path = Path(path_value)
@@ -25,9 +28,30 @@ def validate_path(path_value: str, label: str) -> Path:
     return path
 
 
+def ensure_directory(path_value: str) -> Path:
+    """
+    Create an output directory when it does not already exist.
+
+    Git does not track empty directories, so output folders such as
+    ``results`` and ``logs`` may be missing after cloning the repository.
+    """
+
+    path = Path(path_value)
+
+    path.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    return path
+
+
 def main() -> None:
     """
     Load and validate Experiment 01 configuration.
+
+    This runner currently performs configuration and artifact validation only.
+    It does not load the language model or generate responses yet.
     """
 
     bundle = load_experiment_bundle(DEFAULT_CONFIG_PATH)
@@ -41,23 +65,42 @@ def main() -> None:
     trait = trait_config["trait"]
     data = trait_config["data"]
     outputs = experiment_config["outputs"]
+    sampling = experiment_config["sampling"]
 
+    # The extraction artifact is an input and must already exist.
     extraction_artifact = validate_path(
         data["extraction_artifact_path"],
         "Extraction artifact",
     )
 
-    artifact = load_trait_artifact(extraction_artifact)
-
-    sampling = experiment_config["sampling"]
+    artifact = load_trait_artifact(
+        extraction_artifact
+    )
 
     question_count = sampling["number_of_questions"]
+
     positive_instruction_count = sampling[
         "number_of_positive_instructions"
     ]
+
     negative_instruction_count = sampling[
         "number_of_negative_instructions"
     ]
+
+    if question_count <= 0:
+        raise ValueError(
+            "number_of_questions must be greater than zero."
+        )
+
+    if positive_instruction_count <= 0:
+        raise ValueError(
+            "number_of_positive_instructions must be greater than zero."
+        )
+
+    if negative_instruction_count <= 0:
+        raise ValueError(
+            "number_of_negative_instructions must be greater than zero."
+        )
 
     if question_count > len(artifact.questions):
         raise ValueError(
@@ -74,19 +117,18 @@ def main() -> None:
             "Requested more negative instructions than the artifact contains."
         )
 
-    experiment_directory = validate_path(
-        outputs["experiment_directory"],
-        "Experiment directory",
+    # These are output locations. Create them automatically because Git does
+    # not preserve empty directories when the repository is cloned.
+    experiment_directory = ensure_directory(
+        outputs["experiment_directory"]
     )
 
-    results_directory = validate_path(
-        outputs["results_directory"],
-        "Results directory",
+    results_directory = ensure_directory(
+        outputs["results_directory"]
     )
 
-    logs_directory = validate_path(
-        outputs["logs_directory"],
-        "Logs directory",
+    logs_directory = ensure_directory(
+        outputs["logs_directory"]
     )
 
     print("Experiment configuration loaded successfully.")
@@ -99,10 +141,19 @@ def main() -> None:
     print(f"Experiment directory: {experiment_directory}")
     print(f"Results directory: {results_directory}")
     print(f"Logs directory: {logs_directory}")
-    
-    print(f"Available instruction pairs: {len(artifact.instructions)}")
-    print(f"Available questions: {len(artifact.questions)}")
-    print(f"Selected questions: {question_count}")
+    print()
+    print(
+        f"Available instruction pairs: "
+        f"{len(artifact.instructions)}"
+    )
+    print(
+        f"Available questions: "
+        f"{len(artifact.questions)}"
+    )
+    print(
+        f"Selected questions: "
+        f"{question_count}"
+    )
     print(
         f"Selected positive instructions: "
         f"{positive_instruction_count}"
