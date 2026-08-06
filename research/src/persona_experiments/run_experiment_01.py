@@ -383,11 +383,7 @@ def execute_samples(
             activation_path,
         )
 
-        generation_reached_token_limit = (
-            result.generation.generated_token_ids.shape[1]
-            >= generation_config["max_new_tokens"]
-        )
-
+        
         record = {
             "sample_id": sample_id,
             "condition": sample["condition"],
@@ -446,8 +442,14 @@ def execute_samples(
             "generation_max_new_tokens": (
                 generation_config["max_new_tokens"]
             ),
+            "generation_generated_eos_token": (
+                result.generation.generated_eos_token
+            ),
             "generation_reached_token_limit": (
-                generation_reached_token_limit
+                result.generation.reached_max_new_tokens
+            ),
+            "generation_termination_reason": (
+                result.generation.termination_reason
             ),
             "activation_file": str(activation_path),
             "repeatability": repeatability_result,
@@ -466,6 +468,18 @@ def execute_samples(
         print(
             "Generation reached token limit: "
             f"{record['generation_reached_token_limit']}"
+        )
+        print(
+            "Generated EOS token: "
+            f"{record['generation_generated_eos_token']}"
+        )
+        print(
+            "Generation reached token limit: "
+            f"{record['generation_reached_token_limit']}"
+        )
+        print(
+            "Generation termination reason: "
+            f"{record['generation_termination_reason']}"
         )
         print(f"Response: {record['response_text']}")
 

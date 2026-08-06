@@ -1,4 +1,6 @@
+from ast import arguments
 from types import SimpleNamespace
+from unittest import result
 
 import pytest
 import torch
@@ -130,6 +132,9 @@ def test_generates_and_decodes_only_new_tokens() -> None:
     )
 
     assert result.response_text == "Generated response"
+    assert result.generated_eos_token is False
+    assert result.reached_max_new_tokens is False
+    assert result.termination_reason == "other"
 
     assert result.prompt_input_ids.shape == (1, 3)
     assert result.generated_token_ids.shape == (1, 2)
@@ -147,10 +152,11 @@ def test_generates_and_decodes_only_new_tokens() -> None:
     assert arguments["eos_token_id"] == 99
     assert arguments["pad_token_id"] == 0
 
-    # Temperature and top_p should not be passed for deterministic generation.
-    assert "temperature" not in arguments
-    assert "top_p" not in arguments
-
+    # Sampling-only arguments are explicitly disabled during deterministic
+    # generation so that model-level generation defaults do not trigger warnings.
+    assert arguments["temperature"] is None
+    assert arguments["top_p"] is None
+    assert arguments["top_k"] is None
 
 def test_passes_sampling_arguments_when_enabled() -> None:
     model = FakeModel()
