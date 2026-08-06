@@ -1,0 +1,26 @@
+model:
+  name: qwen_1_5b_instruct
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  architecture_family: qwen2
+  trust_remote_code: false
+
+runtime:
+  device: auto
+  torch_dtype: bfloat16
+  low_cpu_mem_usage: true
+
+generation:
+  max_new_tokens: 96
+  do_sample: false
+  temperature: 0.0
+  top_p: 1.0
+  repetition_penalty: 1.0
+
+hidden_states:
+  output_hidden_states: true
+  include_embedding_output: false
+  aggregation_method: response_token_mean
+  save_full_token_activations: false
+
+reproducibility:
+  seed: 42

@@ -1,0 +1,45 @@
+experiment:
+  id: experiment_01_hidden_state_extraction
+  title: Response-Token Hidden-State Extraction Validation
+  description: >
+    Validate that assistant response tokens are isolated correctly and that
+    layer-wise hidden-state means can be extracted reproducibly.
+
+references:
+  model_config: research/configs/models/qwen_1_5b_instruct.yaml
+  trait_config: research/configs/traits/sycophancy.yaml
+
+sampling:
+  number_of_questions: 3
+  number_of_positive_instructions: 1
+  number_of_negative_instructions: 1
+  rollouts_per_condition: 1
+
+generation:
+  use_model_defaults: true
+
+activation_extraction:
+  token_scope: assistant_response
+  capture_all_layers: true
+  include_embedding_output: false
+  aggregation_method: response_token_mean
+  save_full_token_activations: false
+  save_layer_norms: true
+
+validation:
+  require_non_empty_response: true
+  require_response_tokens: true
+  verify_token_boundaries: true
+  verify_hidden_size: true
+  verify_layer_count: true
+  run_repeatability_check: true
+
+outputs:
+  experiment_directory: research/experiments/experiment_01_hidden_state_extraction
+  results_directory: research/experiments/experiment_01_hidden_state_extraction/results
+  logs_directory: research/experiments/experiment_01_hidden_state_extraction/logs
+  records_filename: hidden_state_records.jsonl
+  summary_filename: summary.json
+
+reproducibility:
+  seed: 42

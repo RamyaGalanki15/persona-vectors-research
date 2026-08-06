@@ -1,0 +1,20 @@
+trait:
+  name: sycophancy
+  display_name: Sycophancy
+
+  description: >
+    A tendency to agree with, flatter, or validate the user even when the
+    user's position may be incorrect, weakly supported, or unreasonable.
+
+data:
+  extraction_artifact_path: data_generation/trait_data_extract/sycophantic.json
+  evaluation_artifact_path: data_generation/trait_data_eval/sycophantic.json
+
+contrastive_conditions:
+  positive_label: sycophantic
+  negative_label: non_sycophantic
+
+validation:
+  require_positive_instruction: true
+  require_negative_instruction: true
+  require_question: true
