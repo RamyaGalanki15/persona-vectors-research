@@ -54,9 +54,30 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def validate_path(path_value: str, label: str) -> Path:
+def validate_path(
+    path_value: str,
+    label: str,
+) -> Path:
     """
     Validate that a required input path exists.
+
+    Parameters
+    ----------
+    path_value:
+        Configured file or directory path.
+
+    label:
+        Human-readable path description used in error messages.
+
+    Returns
+    -------
+    Path
+        Validated path.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the configured path does not exist.
     """
 
     path = Path(path_value)
@@ -72,10 +93,17 @@ def validate_path(path_value: str, label: str) -> Path:
 def ensure_directory(path_value: str) -> Path:
     """
     Create an output directory when it does not already exist.
+
+    Git does not preserve empty directories, so output directories may be
+    absent after cloning the repository.
     """
 
     path = Path(path_value)
-    path.mkdir(parents=True, exist_ok=True)
+
+    path.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     return path
 
@@ -90,6 +118,13 @@ def build_execution_samples(
 ) -> list[dict[str, Any]]:
     """
     Build a bounded list of positive and/or negative execution samples.
+
+    Samples are ordered deterministically:
+
+    1. positive samples, when requested;
+    2. negative samples, when requested;
+    3. instruction index;
+    4. question index.
     """
 
     if max_samples <= 0:
@@ -146,16 +181,113 @@ def build_execution_samples(
     return samples[:max_samples]
 
 
+def compare_repeatability(
+    first_result: Any,
+    repeated_result: Any,
+) -> dict[str, Any]:
+    """
+    Compare two deterministic executions of the same sample.
+
+    The comparison checks:
+
+    - generated token IDs;
+    - decoded response text;
+    - activation tensor shape;
+    - maximum absolute activation difference;
+    - mean absolute activation difference.
+
+    Returns
+    -------
+    dict[str, Any]
+        Repeatability metrics suitable for JSON serialization.
+
+    Raises
+    ------
+    ValueError
+        If activation tensor shapes differ.
+    """
+
+    first_tokens = (
+        first_result.generation.generated_token_ids
+    )
+
+    repeated_tokens = (
+        repeated_result.generation.generated_token_ids
+    )
+
+    generated_tokens_match = torch.equal(
+        first_tokens,
+        repeated_tokens,
+    )
+
+    response_text_matches = (
+        first_result.generation.response_text
+        == repeated_result.generation.response_text
+    )
+
+    first_activations = (
+        first_result.extraction.hidden_states
+        .response_token_means
+    )
+
+    repeated_activations = (
+        repeated_result.extraction.hidden_states
+        .response_token_means
+    )
+
+    if first_activations.shape != repeated_activations.shape:
+        raise ValueError(
+            "Repeatability activation shapes do not match. "
+            f"First shape: {tuple(first_activations.shape)}. "
+            f"Repeated shape: {tuple(repeated_activations.shape)}."
+        )
+
+    absolute_difference = torch.abs(
+        first_activations
+        - repeated_activations
+    )
+
+    maximum_absolute_difference = (
+        absolute_difference.max().item()
+    )
+
+    mean_absolute_difference = (
+        absolute_difference.mean().item()
+    )
+
+    return {
+        "generated_tokens_match": generated_tokens_match,
+        "response_text_matches": response_text_matches,
+        "activation_shape_matches": True,
+        "maximum_absolute_difference": (
+            maximum_absolute_difference
+        ),
+        "mean_absolute_difference": (
+            mean_absolute_difference
+        ),
+        "first_generated_token_count": int(
+            first_tokens.shape[1]
+        ),
+        "repeated_generated_token_count": int(
+            repeated_tokens.shape[1]
+        ),
+    }
+
+
 def execute_samples(
     model: torch.nn.Module,
     tokenizer: Any,
     samples: list[dict[str, Any]],
     generation_config: dict[str, Any],
     include_embedding_output: bool,
+    run_repeatability_check: bool,
     results_directory: Path,
 ) -> list[dict[str, Any]]:
     """
     Generate responses, extract activations, and save sample outputs.
+
+    When repeatability checking is enabled, every sample is executed twice
+    with the same deterministic generation settings.
     """
 
     records: list[dict[str, Any]] = []
@@ -193,6 +325,48 @@ def execute_samples(
             ),
         )
 
+        repeatability_result: dict[str, Any] | None = None
+
+        if run_repeatability_check:
+            print(
+                "Running deterministic repeatability check..."
+            )
+
+            repeated_result = run_sample_pipeline(
+                model=model,
+                tokenizer=tokenizer,
+                system_instruction=sample[
+                    "system_instruction"
+                ],
+                user_question=sample["user_question"],
+                generation_config=generation_config,
+                include_embedding_output=(
+                    include_embedding_output
+                ),
+            )
+
+            repeatability_result = compare_repeatability(
+                first_result=result,
+                repeated_result=repeated_result,
+            )
+
+            print(
+                "Generated tokens match: "
+                f"{repeatability_result['generated_tokens_match']}"
+            )
+            print(
+                "Response text matches: "
+                f"{repeatability_result['response_text_matches']}"
+            )
+            print(
+                "Maximum activation difference: "
+                f"{repeatability_result['maximum_absolute_difference']}"
+            )
+            print(
+                "Mean activation difference: "
+                f"{repeatability_result['mean_absolute_difference']}"
+            )
+
         hidden_states = result.extraction.hidden_states
         boundaries = result.extraction.boundaries
 
@@ -207,6 +381,11 @@ def execute_samples(
         torch.save(
             hidden_states.response_token_means,
             activation_path,
+        )
+
+        generation_reached_token_limit = (
+            result.generation.generated_token_ids.shape[1]
+            >= generation_config["max_new_tokens"]
         )
 
         record = {
@@ -251,7 +430,27 @@ def execute_samples(
             "response_token_norms": (
                 hidden_states.response_token_norms.tolist()
             ),
+            "activation_dtype": str(
+                hidden_states.response_token_means.dtype
+            ),
+            "activation_contains_nan": bool(
+                torch.isnan(
+                    hidden_states.response_token_means
+                ).any().item()
+            ),
+            "activation_contains_inf": bool(
+                torch.isinf(
+                    hidden_states.response_token_means
+                ).any().item()
+            ),
+            "generation_max_new_tokens": (
+                generation_config["max_new_tokens"]
+            ),
+            "generation_reached_token_limit": (
+                generation_reached_token_limit
+            ),
             "activation_file": str(activation_path),
+            "repeatability": repeatability_result,
         }
 
         records.append(record)
@@ -263,6 +462,10 @@ def execute_samples(
         print(
             f"Hidden-state shape: "
             f"{record['response_token_mean_shape']}"
+        )
+        print(
+            "Generation reached token limit: "
+            f"{record['generation_reached_token_limit']}"
         )
         print(f"Response: {record['response_text']}")
 
@@ -296,6 +499,12 @@ def save_records(
                 + "\n"
             )
 
+    repeatability_results = [
+        record["repeatability"]
+        for record in records
+        if record["repeatability"] is not None
+    ]
+
     summary = {
         "samples_completed": len(records),
         "conditions": [
@@ -313,6 +522,55 @@ def save_records(
         "retained_hidden_state_counts": [
             record["retained_hidden_state_count"]
             for record in records
+        ],
+        "activation_shapes": [
+            record["response_token_mean_shape"]
+            for record in records
+        ],
+        "generation_reached_token_limit": [
+            record["generation_reached_token_limit"]
+            for record in records
+        ],
+        "activation_contains_nan": [
+            record["activation_contains_nan"]
+            for record in records
+        ],
+        "activation_contains_inf": [
+            record["activation_contains_inf"]
+            for record in records
+        ],
+        "repeatability_checks_completed": len(
+            repeatability_results
+        ),
+        "all_generated_tokens_match": (
+            all(
+                result["generated_tokens_match"]
+                for result in repeatability_results
+            )
+            if repeatability_results
+            else None
+        ),
+        "all_response_texts_match": (
+            all(
+                result["response_text_matches"]
+                for result in repeatability_results
+            )
+            if repeatability_results
+            else None
+        ),
+        "maximum_repeatability_difference": (
+            max(
+                result[
+                    "maximum_absolute_difference"
+                ]
+                for result in repeatability_results
+            )
+            if repeatability_results
+            else None
+        ),
+        "mean_repeatability_differences": [
+            result["mean_absolute_difference"]
+            for result in repeatability_results
         ],
         "records_file": str(records_path),
     }
@@ -361,6 +619,9 @@ def main() -> None:
     sampling = experiment_config["sampling"]
     activation_config = experiment_config[
         "activation_extraction"
+    ]
+    validation_config = experiment_config[
+        "validation"
     ]
 
     extraction_artifact = validate_path(
@@ -432,6 +693,13 @@ def main() -> None:
         outputs["logs_directory"]
     )
 
+    run_repeatability_check = bool(
+        validation_config.get(
+            "run_repeatability_check",
+            False,
+        )
+    )
+
     print(
         "Experiment configuration loaded successfully."
     )
@@ -461,6 +729,10 @@ def main() -> None:
     print(
         f"Selected negative instructions: "
         f"{negative_instruction_count}"
+    )
+    print(
+        f"Repeatability check enabled: "
+        f"{run_repeatability_check}"
     )
 
     if not args.execute:
@@ -504,6 +776,9 @@ def main() -> None:
                 "include_embedding_output"
             ]
         ),
+        run_repeatability_check=(
+            run_repeatability_check
+        ),
         results_directory=results_directory,
     )
 
@@ -519,7 +794,9 @@ def main() -> None:
     )
 
     print()
-    print("Experiment execution completed successfully.")
+    print(
+        "Experiment execution completed successfully."
+    )
 
 
 if __name__ == "__main__":
