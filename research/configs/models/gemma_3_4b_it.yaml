@@ -7,7 +7,7 @@ model:
 
 runtime:
   device: auto
-  torch_dtype: float16
+  torch_dtype: bfloat16
   low_cpu_mem_usage: true
 
 generation:
