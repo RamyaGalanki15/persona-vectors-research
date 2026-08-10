@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -8,7 +7,6 @@ from pathlib import Path
 from persona_experiments.experiment_config import (
     load_judge_experiment_bundle,
 )
-
 from persona_experiments.judging.gemma_judge import (
     GemmaSycophancyJudge,
 )
@@ -21,6 +19,9 @@ DEFAULT_CONFIG_PATH = Path(
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments for Experiment 02.
+    """
 
     parser = argparse.ArgumentParser(
         description=(
@@ -48,16 +49,26 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help=(
+            "Show detailed model-loading and "
+            "generation diagnostics."
+        ),
+    )
+
     return parser.parse_args()
 
 
 def ensure_directory(
-    path_value: str,
+    path_value: str | Path,
 ) -> Path:
+    """
+    Create an output directory if needed.
+    """
 
-    path = Path(
-        path_value
-    )
+    path = Path(path_value)
 
     path.mkdir(
         parents=True,
@@ -70,10 +81,12 @@ def ensure_directory(
 def load_calibration_examples(
     dataset_path: str | Path,
 ) -> list[dict]:
+    """
+    Load and validate calibration examples
+    from a JSONL dataset.
+    """
 
-    path = Path(
-        dataset_path
-    )
+    path = Path(dataset_path)
 
     if not path.exists():
         raise FileNotFoundError(
@@ -98,9 +111,16 @@ def load_calibration_examples(
             if not stripped:
                 continue
 
-            record = json.loads(
-                stripped
-            )
+            try:
+                record = json.loads(
+                    stripped
+                )
+
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "Invalid JSON in calibration "
+                    f"dataset at line {line_number}."
+                ) from exc
 
             required_fields = {
                 "sample_id",
@@ -123,9 +143,7 @@ def load_calibration_examples(
                 )
 
             human_score = int(
-                record[
-                    "human_score"
-                ]
+                record["human_score"]
             )
 
             if not 0 <= human_score <= 100:
@@ -134,9 +152,19 @@ def load_calibration_examples(
                     "between 0 and 100."
                 )
 
+            record["human_score"] = (
+                human_score
+            )
+
             records.append(
                 record
             )
+
+    if not records:
+        raise ValueError(
+            "Calibration dataset contains "
+            "no usable examples."
+        )
 
     sample_ids = [
         record["sample_id"]
@@ -154,7 +182,46 @@ def load_calibration_examples(
     return records
 
 
+def print_experiment_header(
+    experiment: dict,
+    judge_model_settings: dict,
+    total_examples: int,
+) -> None:
+    """
+    Print a concise experiment summary.
+    """
+
+    print()
+    print("=" * 60)
+    print(
+        "Experiment 02 — "
+        "Sycophancy Judge Calibration"
+    )
+    print("=" * 60)
+
+    print(
+        f"Experiment : "
+        f"{experiment['id']}"
+    )
+
+    print(
+        f"Judge      : "
+        f"{judge_model_settings['model_id']}"
+    )
+
+    print(
+        f"Dataset    : "
+        f"{total_examples} examples"
+    )
+
+    print("=" * 60)
+
+
 def main() -> None:
+    """
+    Validate configuration or execute
+    Gemma judge calibration.
+    """
 
     args = parse_args()
 
@@ -212,44 +279,41 @@ def main() -> None:
         ]
     )
 
-    print(
-        "Experiment configuration "
-        "loaded successfully."
+    print_experiment_header(
+        experiment=experiment,
+        judge_model_settings=(
+            judge_model_settings
+        ),
+        total_examples=len(examples),
     )
 
-    print()
-    print(
-        f"Experiment ID: "
-        f"{experiment['id']}"
-    )
-
-    print(
-        f"Experiment title: "
-        f"{experiment['title']}"
-    )
-
-    print(
-        f"Judge model: "
-        f"{judge_model_settings['model_id']}"
-    )
-
-    print(
-        f"Calibration examples: "
-        f"{len(examples)}"
-    )
-
-    print(
-        f"Results directory: "
-        f"{results_directory}"
-    )
+    # ---------------------------------------------------------
+    # Dry-run mode
+    # ---------------------------------------------------------
 
     if not args.execute:
+
         print()
         print(
-            "Dry run complete. "
+            "Dry run successful."
+        )
+
+        print(
+            "Configuration and dataset "
+            "validated."
+        )
+
+        print(
             "No judge model was loaded."
         )
+
+        print()
+
         return
+
+    # ---------------------------------------------------------
+    # Execution validation
+    # ---------------------------------------------------------
 
     if args.max_samples <= 0:
         raise ValueError(
@@ -265,35 +329,37 @@ def main() -> None:
 
     print()
     print(
-        "Execution requested."
-    )
-
-    print(
-        f"Samples selected: "
+        f"Samples    : "
         f"{len(selected_examples)}"
     )
 
     print(
-        "Loading Gemma judge..."
+        "Loading judge model..."
     )
 
+    # Detailed model/HF diagnostics are shown
+    # only when --verbose is supplied.
     judge = GemmaSycophancyJudge(
-        judge_model_config
+        model_config=judge_model_config,
+        verbose=args.verbose,
     )
 
-    predictions = []
+    print(
+        "Judge model loaded."
+    )
+
+    print()
+
+    # ---------------------------------------------------------
+    # Judge inference
+    # ---------------------------------------------------------
+
+    predictions: list[dict] = []
 
     for index, example in enumerate(
         selected_examples,
         start=1,
     ):
-
-        print()
-        print(
-            f"[{index}/"
-            f"{len(selected_examples)}] "
-            f"{example['sample_id']}"
-        )
 
         result = judge.judge(
             question=example[
@@ -304,6 +370,16 @@ def main() -> None:
             ],
         )
 
+        human_score = int(
+            example[
+                "human_score"
+            ]
+        )
+
+        judge_score = int(
+            result.sycophancy_score
+        )
+
         record = {
             **example,
 
@@ -312,13 +388,11 @@ def main() -> None:
             ),
 
             "judge_score": (
-                result
-                .sycophancy_score
+                judge_score
             ),
 
             "judge_semantic_valid": (
-                result
-                .semantic_valid
+                result.semantic_valid
             ),
 
             "judge_reasoning": (
@@ -330,9 +404,8 @@ def main() -> None:
             ),
 
             "absolute_error": abs(
-                example["human_score"]
-                - result
-                .sycophancy_score
+                human_score
+                - judge_score
             ),
         }
 
@@ -340,20 +413,35 @@ def main() -> None:
             record
         )
 
+        # Compact, presentation-friendly output.
         print(
-            f"Human score: "
-            f"{example['human_score']}"
+            f"[{index}/"
+            f"{len(selected_examples)}] "
+            f"{example['sample_id']} "
+            f"| human={human_score:3d} "
+            f"| judge={judge_score:3d} "
+            f"| valid="
+            f"{result.semantic_valid}"
         )
 
-        print(
-            f"Gemma score: "
-            f"{result.sycophancy_score}"
-        )
+        # Reasoning is useful while debugging,
+        # but should not clutter normal runs.
+        if args.verbose:
+            print(
+                "  Category  : "
+                f"{example['category']}"
+            )
 
-        print(
-            f"Reasoning: "
-            f"{result.reasoning}"
-        )
+            print(
+                "  Reasoning : "
+                f"{result.reasoning}"
+            )
+
+            print()
+
+    # ---------------------------------------------------------
+    # Save predictions
+    # ---------------------------------------------------------
 
     output_path = (
         results_directory
@@ -377,17 +465,29 @@ def main() -> None:
                 + "\n"
             )
 
+    # ---------------------------------------------------------
+    # Final summary
+    # ---------------------------------------------------------
+
     print()
+    print("-" * 60)
+
     print(
-        f"Predictions saved to: "
+        f"Completed  : "
+        f"{len(predictions)} samples"
+    )
+
+    print(
+        f"Results    : "
         f"{output_path}"
     )
 
-    print()
     print(
-        "Experiment 02 smoke test "
-        "completed successfully."
+        "Status     : SUCCESS"
     )
+
+    print("-" * 60)
+    print()
 
 
 if __name__ == "__main__":
