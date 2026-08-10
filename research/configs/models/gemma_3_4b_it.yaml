@@ -1,0 +1,17 @@
+model:
+  name: gemma_3_4b_it
+  model_id: google/gemma-3-4b-it
+  architecture_family: gemma3
+  role: judge
+  trust_remote_code: false
+
+runtime:
+  device: auto
+  torch_dtype: bfloat16
+  low_cpu_mem_usage: true
+
+generation:
+  max_new_tokens: 160
+  do_sample: false
+
+seed: 42

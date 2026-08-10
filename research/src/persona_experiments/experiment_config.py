@@ -58,3 +58,51 @@ def load_experiment_bundle(
         "model": model_config,
         "trait": trait_config,
     }
+
+def load_judge_experiment_bundle(
+    experiment_config_path: str | Path,
+) -> dict[str, dict[str, Any]]:
+    """
+    Load a judge-calibration experiment together with its referenced
+    judge-model configuration.
+
+    Judge calibration does not require the target-model trait artifact
+    configuration used by Experiment 01.
+    """
+
+    experiment_path = Path(
+        experiment_config_path
+    )
+
+    experiment_config = load_yaml_config(
+        experiment_path
+    )
+
+    references = experiment_config.get(
+        "references"
+    )
+
+    if not isinstance(references, dict):
+        raise ValueError(
+            "Judge experiment configuration must contain "
+            "a 'references' mapping."
+        )
+
+    judge_model_config_path = references.get(
+        "judge_model_config"
+    )
+
+    if not judge_model_config_path:
+        raise ValueError(
+            "Judge experiment configuration is missing "
+            "'references.judge_model_config'."
+        )
+
+    judge_model_config = load_yaml_config(
+        judge_model_config_path
+    )
+
+    return {
+        "experiment": experiment_config,
+        "judge_model": judge_model_config,
+    }
